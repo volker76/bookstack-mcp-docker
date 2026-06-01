@@ -40,6 +40,8 @@ if (process.env.JWT_SECRET) {
 
 const BOOKSTACK_BASE_URL = (process.env.BOOKSTACK_BASE_URL || '').replace(/\/$/, '');
 const DEBUG = process.env.DEBUG === 'true';
+const VERBOSE_RAW = (process.env.VERBOSE || '').trim().toLowerCase();
+const VERBOSE = ['1', 'true', 'yes', 'on'].includes(VERBOSE_RAW);
 const SESSION_IDLE_TIMEOUT_MS = parseInt(process.env.SESSION_IDLE_TIMEOUT_MS || String(30 * 60 * 1000), 10);
 
 // ─── In-memory stores ─────────────────────────────────────────────────────────
@@ -264,6 +266,8 @@ function spawnChild(token) {
       NODE_ENV:            process.env.NODE_ENV || 'production',
       MCP_TRANSPORT:       'stdio',
       BASE_URL:            BASE_URL,
+      SERVER_INSTRUCTIONS: process.env.SERVER_INSTRUCTIONS || '',
+      VERBOSE:             process.env.VERBOSE || '',
     },
     stdio: ['pipe', 'pipe', 'inherit'], // stderr → host stderr for debugging
   });
@@ -368,7 +372,9 @@ async function newMcpSession(token, { reconnect = false } = {}) {
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-        transport.send(JSON.parse(line)).catch((e) => console.error('[relay→http]', e.message));
+        const msg = JSON.parse(line);
+        if (VERBOSE) console.log('[VERBOSE] [relay→http]', JSON.stringify(msg, null, 2));
+        transport.send(msg).catch((e) => console.error('[relay→http]', e.message));
       } catch (e) {
         console.error('[stdout parse]', e.message, '| line:', line.slice(0, 120));
       }
@@ -377,6 +383,7 @@ async function newMcpSession(token, { reconnect = false } = {}) {
 
   // ── HTTP transport → child stdin ──
   transport.onmessage = (msg) => {
+    if (VERBOSE) console.log('[VERBOSE] [relay→child]', JSON.stringify(msg, null, 2));
     child.stdin.write(JSON.stringify(msg) + '\n');
   };
 
@@ -867,4 +874,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`BookStack MCP Docker running on :${PORT}`);
   console.log(`Base URL: ${BASE_URL}`);
   console.log(`Stdio server: ${STDIO_SERVER_PATH}`);
+  const instr = process.env.SERVER_INSTRUCTIONS || '';
+  if (instr) {
+    console.log(`[mcp] SERVER_INSTRUCTIONS set (${instr.length} chars):\n${instr}`);
+  } else if (DEBUG) {
+    console.log('[mcp] SERVER_INSTRUCTIONS not set — initialize response omits "instructions"');
+  }
+  if (VERBOSE) {
+    console.log('[mcp] VERBOSE=enabled — full request/response JSON logged at relay and child level');
+  }
 });

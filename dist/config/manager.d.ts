@@ -20,14 +20,17 @@ export declare const ConfigSchema: z.ZodObject<{
         name: z.ZodDefault<z.ZodString>;
         version: z.ZodDefault<z.ZodString>;
         port: z.ZodDefault<z.ZodNumber>;
+        instructions: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
         port: number;
         name: string;
         version: string;
+        instructions?: string | undefined;
     }, {
         port?: number | undefined;
         name?: string | undefined;
         version?: string | undefined;
+        instructions?: string | undefined;
     }>;
     rateLimit: z.ZodObject<{
         requestsPerMinute: z.ZodDefault<z.ZodNumber>;
@@ -54,10 +57,10 @@ export declare const ConfigSchema: z.ZodObject<{
         format: z.ZodDefault<z.ZodEnum<["json", "pretty"]>>;
     }, "strip", z.ZodTypeAny, {
         format: "json" | "pretty";
-        level: "info" | "error" | "warn" | "debug";
+        level: "debug" | "info" | "error" | "warn";
     }, {
         format?: "json" | "pretty" | undefined;
-        level?: "info" | "error" | "warn" | "debug" | undefined;
+        level?: "debug" | "info" | "error" | "warn" | undefined;
     }>;
     context7: z.ZodObject<{
         enabled: z.ZodDefault<z.ZodBoolean>;
@@ -109,6 +112,7 @@ export declare const ConfigSchema: z.ZodObject<{
         port: number;
         name: string;
         version: string;
+        instructions?: string | undefined;
     };
     rateLimit: {
         requestsPerMinute: number;
@@ -116,7 +120,7 @@ export declare const ConfigSchema: z.ZodObject<{
     };
     logging: {
         format: "json" | "pretty";
-        level: "info" | "error" | "warn" | "debug";
+        level: "debug" | "info" | "error" | "warn";
     };
     context7: {
         enabled: boolean;
@@ -146,6 +150,7 @@ export declare const ConfigSchema: z.ZodObject<{
         port?: number | undefined;
         name?: string | undefined;
         version?: string | undefined;
+        instructions?: string | undefined;
     };
     rateLimit: {
         requestsPerMinute?: number | undefined;
@@ -153,7 +158,7 @@ export declare const ConfigSchema: z.ZodObject<{
     };
     logging: {
         format?: "json" | "pretty" | undefined;
-        level?: "info" | "error" | "warn" | "debug" | undefined;
+        level?: "debug" | "info" | "error" | "warn" | undefined;
     };
     context7: {
         enabled?: boolean | undefined;

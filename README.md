@@ -82,6 +82,7 @@ Edit `.env` and fill in your values:
 | `BASE_URL` | ✓ | Public HTTPS URL of this MCP server |
 | `MCP_PORT` | | Port inside the container (default: `3100`) |
 | `DEBUG` | | Set to `true` to enable auth debug logging |
+| `VERBOSE` | | Set to `1`, `true`, `True`, or `TRUE` to log full request and response JSON on stderr |
 
 ### 2. Add to your docker-compose.yml
 
@@ -288,6 +289,23 @@ docker build -t volkerhaensel/bookstack-mcp-docker:latest . && \
 - **BookStack token in JWT** — the token is stored in the signed JWT payload (`bst` claim). The payload is base64-encoded but not encrypted (signed HS256). Acceptable because transport is HTTPS-only and the BookStack token is a dedicated API credential, not a master password
 - **Port binding** — bind to `127.0.0.1:3100:3100` in production so the port is only reachable via nginx, not directly from the internet
 
+## Server Instructions
+
+The `SERVER_INSTRUCTIONS` environment variable lets you set a server-wide hint text that MCP
+clients receive in the `result.instructions` field of the JSON-RPC `initialize` response.
+Use it to tell the AI assistant what this server is for, what content is available, and how
+to use the tools effectively.
+
+```env
+SERVER_INSTRUCTIONS=This server gives access to our internal BookStack knowledge base. \
+  Use bookstack_search to find relevant pages before reading them individually.
+```
+
+If the variable is empty or unset, the `instructions` field is **omitted entirely** from the
+response — no empty string is sent.
+
+See [docs/instructions.md](docs/instructions.md) for full details and examples.
+
 ## Debugging
 
 Set `DEBUG=true` in the environment to enable auth debug output:
@@ -295,6 +313,29 @@ Set `DEBUG=true` in the environment to enable auth debug output:
 ```bash
 docker logs bookstack-mcp -f
 ```
+
+### Verbose request/response logging
+
+Set `VERBOSE=1` (or `true` / `True` / `TRUE`) to have the MCP server core log every
+incoming request and the full JSON response on **stderr**:
+
+```bash
+# standalone / stdio
+VERBOSE=1 MCP_TRANSPORT=stdio node dist/server.js
+
+# docker-compose
+environment:
+  - VERBOSE=1
+```
+
+When active, the server forces its log level to `debug` (overrides `LOG_LEVEL`) and emits
+`[VERBOSE]` prefixed lines for:
+- Every tool call with its arguments (`CallTool request`)
+- The complete result JSON before it is wrapped in the MCP envelope (`CallTool response`)
+- `ListTools`, `ListResources`, and `ReadResource` requests and responses
+
+This is intended for development and troubleshooting only — leave it off in production
+to keep logs concise.
 
 ## License
 

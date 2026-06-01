@@ -14,6 +14,7 @@ import {
 import { BookStackClient } from './api/client';
 import { ConfigManager, Config } from './config/manager';
 import { Logger } from './utils/logger';
+import { parseBooleanEnv } from './utils/env';
 import { ErrorHandler } from './utils/errors';
 import { ValidationHandler } from './validation/validator';
 import { BookTools } from './tools/books';
@@ -30,6 +31,7 @@ import { PermissionTools } from './tools/permissions';
 import { AuditTools } from './tools/audit';
 import { SystemTools } from './tools/system';
 import { ServerInfoTools } from './tools/server-info';
+import { InstructionsTools } from './tools/instructions';
 import { BookResources } from './resources/books';
 import { PageResources } from './resources/pages';
 import { ChapterResources } from './resources/chapters';
@@ -59,6 +61,7 @@ export class BookStackMCPServer {
   private validator: ValidationHandler;
   private tools: Map<string, MCPTool> = new Map();
   private resources: Map<string, MCPResource> = new Map();
+  private verbose: boolean = parseBooleanEnv(process.env.VERBOSE);
 
   constructor(configOverrides?: Partial<Config>) {
     const baseConfig = ConfigManager.getInstance().getConfig();
@@ -87,6 +90,9 @@ export class BookStackMCPServer {
         resources: {},
         logging: {},
       },
+      ...(config.server.instructions
+        ? { instructions: config.server.instructions }
+        : {}),
     });
 
     this.setupTools();
@@ -98,6 +104,23 @@ export class BookStackMCPServer {
       resources: this.resources.size,
       baseUrl: config.bookstack.baseUrl,
     });
+    this.logger.debug('Server instructions', {
+      set: !!config.server.instructions,
+      length: config.server.instructions?.length ?? 0,
+    });
+
+    if (this.verbose) {
+      this.logger.debug('[VERBOSE] Verbose request/response logging is enabled');
+    }
+  }
+
+  /**
+   * Emits a detailed debug log for a request or response payload.
+   * Only active when VERBOSE=1/true/True/TRUE is set.
+   */
+  private logVerbose(label: string, payload: unknown): void {
+    if (!this.verbose) return;
+    this.logger.debug(`[VERBOSE] ${label}`, { payload: JSON.stringify(payload, null, 2) });
   }
 
   /**
@@ -119,6 +142,7 @@ export class BookStackMCPServer {
       new AuditTools(this.client, this.validator, this.logger),
       new SystemTools(this.client, this.validator, this.logger),
       new ServerInfoTools(this.logger, this.tools, this.resources),
+      new InstructionsTools(this.logger),
     ];
 
     // Register all tools
@@ -170,7 +194,7 @@ export class BookStackMCPServer {
 
         // Append examples
         if (tool.examples && tool.examples.length > 0) {
-          enhancedDescription += '\n\nExamples:\n' + tool.examples.map(e => 
+          enhancedDescription += '\n\nExamples:\n' + tool.examples.map(e =>
             `- ${e.description}\n  Input: ${JSON.stringify(e.input)}`
           ).join('\n');
         }
@@ -183,14 +207,17 @@ export class BookStackMCPServer {
       });
 
       this.logger.debug(`Listed ${tools.length} tools`);
-      return { tools };
+      const response = { tools };
+      this.logVerbose('ListTools response', response);
+      return response;
     });
 
     // Call tool handler
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-      
+
       this.logger.info(`Tool called: ${name}`, { arguments: args });
+      this.logVerbose('CallTool request', request.params);
 
       const tool = this.tools.get(name);
       if (!tool) {
@@ -200,6 +227,7 @@ export class BookStackMCPServer {
       try {
         const result = await tool.handler(args || {});
         this.logger.info(`Tool ${name} completed successfully`);
+        this.logVerbose('CallTool response', result);
         return {
           content: [{
             type: 'text',
@@ -208,6 +236,7 @@ export class BookStackMCPServer {
         };
       } catch (error) {
         this.logger.error(`Tool ${name} failed`, { error: (error as Error).message, stack: (error as Error).stack });
+        this.logVerbose('CallTool error', { name, error: (error as Error).message });
         throw this.errorHandler.handleError(error);
       }
     });
@@ -222,14 +251,17 @@ export class BookStackMCPServer {
       }));
 
       this.logger.debug(`Listed ${resources.length} resources`);
-      return { resources };
+      const response = { resources };
+      this.logVerbose('ListResources response', response);
+      return response;
     });
 
     // Read resource handler
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
-      
+
       this.logger.info(`Resource requested: ${uri}`);
+      this.logVerbose('ReadResource request', request.params);
 
       // Find matching resource by URI pattern
       let matchedResource: MCPResource | undefined;
@@ -259,7 +291,8 @@ export class BookStackMCPServer {
       try {
         const result = await matchedResource.handler(uri);
         this.logger.info(`Resource ${uri} read successfully`);
-        
+        this.logVerbose('ReadResource response', result);
+
         return {
           contents: [{
             uri,
@@ -269,6 +302,7 @@ export class BookStackMCPServer {
         };
       } catch (error) {
         this.logger.error(`Resource ${uri} failed`, { error: (error as Error).message, stack: (error as Error).stack });
+        this.logVerbose('ReadResource error', { uri, error: (error as Error).message });
         throw this.errorHandler.handleError(error);
       }
     });
